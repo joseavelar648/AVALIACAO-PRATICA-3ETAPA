@@ -1,0 +1,262 @@
+#include <stdio.h>
+#include <string.h>
+
+#define ARQUIVO "contas.dat"
+#define SENHA_ADMIN "1234"
+
+struct Conta {
+    int numero;
+    char titular[50];
+    float saldo;
+};
+
+
+void criarConta();
+void extrato();
+void deposito();
+void saque();
+void transferencia();
+void listarContas();
+int gerarNumeroConta();
+
+int main() {
+    int opcao;
+
+    do {
+        printf("\n===== BANCO C =====\n");
+        printf("1 - Criar Conta\n");
+        printf("2 - Extrato\n");
+        printf("3 - Deposito\n");
+        printf("4 - Saque\n");
+        printf("5 - Transferencia\n");
+        printf("6 - Listar Contas (Admin)\n");
+        printf("7 - Sair\n");
+        printf("Escolha: ");
+        scanf("%d", &opcao);
+
+        switch (opcao) {
+            case 1: criarConta(); break;
+            case 2: extrato(); break;
+            case 3: deposito(); break;
+            case 4: saque(); break;
+            case 5: transferencia(); break;
+            case 6: listarContas(); break;
+            case 7: printf("Encerrando...\n"); break;
+            default: printf("Opcao invalida!\n");
+        }
+    } while (opcao != 7);
+
+    return 0;
+}
+
+int gerarNumeroConta() {
+    FILE *fp = fopen(ARQUIVO, "rb");
+    struct Conta c;
+    int numero = 1;
+
+    if (fp != NULL) {
+        while (fread(&c, sizeof(struct Conta), 1, fp)) {
+            numero = c.numero + 1;
+        }
+        fclose(fp);
+    }
+    return numero;
+}
+
+void criarConta() {
+    struct Conta c;
+    FILE *fp = fopen(ARQUIVO, "ab");
+
+    if (fp == NULL) {
+        printf("Erro ao abrir arquivo!\n");
+        return;
+    }
+
+    c.numero = gerarNumeroConta();
+    c.saldo = 0;
+
+    printf("Nome do titular: ");
+    scanf(" %[^\n]", c.titular);
+
+    fwrite(&c, sizeof(struct Conta), 1, fp);
+    fclose(fp);
+
+    printf("Conta criada com sucesso! Numero: %d\n", c.numero);
+}
+
+void extrato() {
+    int num, encontrado = 0;
+    struct Conta c;
+    FILE *fp = fopen(ARQUIVO, "rb");
+
+    printf("Numero da conta: ");
+    scanf("%d", &num);
+
+    if (fp == NULL) {
+        printf("Arquivo inexistente.\n");
+        return;
+    }
+
+    while (fread(&c, sizeof(struct Conta), 1, fp)) {
+        if (c.numero == num) {
+            printf("\nTitular: %s", c.titular);
+            printf("\nConta: %d", c.numero);
+            printf("\nSaldo: R$ %.2f\n", c.saldo);
+            encontrado = 1;
+            break;
+        }
+    }
+
+    if (!encontrado) {
+        printf("Conta nao encontrada.\n");
+    }
+
+    fclose(fp);
+}
+
+void deposito() {
+    int num;
+    float valor;
+    struct Conta c;
+    FILE *fp = fopen(ARQUIVO, "rb+");
+
+    printf("Numero da conta: ");
+    scanf("%d", &num);
+    printf("Valor do deposito: ");
+    scanf("%f", &valor);
+
+    if (fp == NULL) {
+        printf("Erro no arquivo.\n");
+        return;
+    }
+
+    while (fread(&c, sizeof(struct Conta), 1, fp)) {
+        if (c.numero == num) {
+            c.saldo += valor;
+            fseek(fp, -sizeof(struct Conta), SEEK_CUR);
+            fwrite(&c, sizeof(struct Conta), 1, fp);
+            printf("Deposito realizado.\n");
+            fclose(fp);
+            return;
+        }
+    }
+
+    printf("Conta nao encontrada.\n");
+    fclose(fp);
+}
+
+void saque() {
+    int num;
+    float valor;
+    struct Conta c;
+    FILE *fp = fopen(ARQUIVO, "rb+");
+
+    printf("Numero da conta: ");
+    scanf("%d", &num);
+    printf("Valor do saque: ");
+    scanf("%f", &valor);
+
+    if (fp == NULL) {
+        printf("Erro no arquivo.\n");
+        return;
+    }
+
+    while (fread(&c, sizeof(struct Conta), 1, fp)) {
+        if (c.numero == num) {
+            if (c.saldo >= valor) {
+                c.saldo -= valor;
+                fseek(fp, -sizeof(struct Conta), SEEK_CUR);
+                fwrite(&c, sizeof(struct Conta), 1, fp);
+                printf("Saque realizado.\n");
+            } else {
+                printf("Saldo insuficiente.\n");
+            }
+            fclose(fp);
+            return;
+        }
+    }
+
+    printf("Conta nao encontrada.\n");
+    fclose(fp);
+}
+
+void transferencia() {
+    int origem, destino;
+    float valor;
+    struct Conta c1, c2;
+    FILE *fp = fopen(ARQUIVO, "rb+");
+
+    printf("Conta origem: ");
+    scanf("%d", &origem);
+    printf("Conta destino: ");
+    scanf("%d", &destino);
+    printf("Valor: ");
+    scanf("%f", &valor);
+
+    if (fp == NULL) return;
+
+    int pos1 = -1, pos2 = -1, i = 0;
+
+    while (fread(&c1, sizeof(struct Conta), 1, fp)) {
+        if (c1.numero == origem) pos1 = i;
+        if (c1.numero == destino) pos2 = i;
+        i++;
+    }
+
+    if (pos1 == -1 || pos2 == -1) {
+        printf("Conta invalida.\n");
+        fclose(fp);
+        return;
+    }
+
+    fseek(fp, pos1 * sizeof(struct Conta), SEEK_SET);
+    fread(&c1, sizeof(struct Conta), 1, fp);
+
+    if (c1.saldo < valor) {
+        printf("Saldo insuficiente.\n");
+        fclose(fp);
+        return;
+    }
+
+    fseek(fp, pos2 * sizeof(struct Conta), SEEK_SET);
+    fread(&c2, sizeof(struct Conta), 1, fp);
+
+    c1.saldo -= valor;
+    c2.saldo += valor;
+
+    fseek(fp, pos1 * sizeof(struct Conta), SEEK_SET);
+    fwrite(&c1, sizeof(struct Conta), 1, fp);
+
+    fseek(fp, pos2 * sizeof(struct Conta), SEEK_SET);
+    fwrite(&c2, sizeof(struct Conta), 1, fp);
+
+    printf("Transferencia realizada.\n");
+    fclose(fp);
+}
+
+void listarContas() {
+    char senha[10];
+    struct Conta c;
+    FILE *fp = fopen(ARQUIVO, "rb");
+
+    printf("Senha do administrador: ");
+    scanf("%s", senha);
+
+    if (strcmp(senha, SENHA_ADMIN) != 0) {
+        printf("Senha incorreta.\n");
+        return;
+    }
+
+    if (fp == NULL) {
+        printf("Nenhuma conta cadastrada.\n");
+        return;
+    }
+
+    printf("\n--- CONTAS CADASTRADAS ---\n");
+    while (fread(&c, sizeof(struct Conta), 1, fp)) {
+        printf("Conta: %d | Titular: %s | Saldo: R$ %.2f\n",
+               c.numero, c.titular, c.saldo);
+    }
+
+    fclose(fp);
+}
